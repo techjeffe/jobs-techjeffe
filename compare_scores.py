@@ -233,6 +233,13 @@ td small {
   color: var(--muted);
   font-size: 12px;
 }
+.rationale {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #4f473f;
+  max-width: 42ch;
+}
 .delta {
   font-weight: 700;
 }
@@ -441,6 +448,11 @@ function componentMarkup(row) {
   ).join("") + `</div>`;
 }
 
+function rationaleMarkup(row) {
+  if (!row.new_rationale) return "";
+  return `<div class="rationale">${escapeHtml(row.new_rationale)}</div>`;
+}
+
 function renderRows() {
   const sortMode = document.getElementById("sort").value;
   visibleRows = sortRows(filterRows(payload.rows), sortMode);
@@ -462,6 +474,7 @@ function renderRows() {
         <td>
           <strong><a href="${escapeHtml(row.url || "#")}">${escapeHtml(row.title)}</a></strong>
           <small>${escapeHtml(row.category_label || row.category)}</small>
+          ${rationaleMarkup(row)}
         </td>
         <td>
           <div class="delta ${deltaClass}">${fmtDelta(row.delta)}</div>
