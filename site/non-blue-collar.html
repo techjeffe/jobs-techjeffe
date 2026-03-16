@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Exposure of the US Job Market</title>
+<title>AI Exposure of Non-Blue-Collar Jobs</title>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -12,7 +12,7 @@
   --bg2: #12121a;
   --fg: #e0e0e8;
   --fg2: #888894;
-  --sidebar-w: 220px;
+  --sidebar-w: 260px;
 }
 
 body {
@@ -47,9 +47,10 @@ body {
   font-size: 11px;
   color: var(--fg2);
   margin-top: 4px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
-#sidebar .subtitle a { color: var(--fg2); }
+#sidebar .subtitle a,
+#sidebar .note a { color: var(--fg2); }
 
 .stat-section {
   display: flex;
@@ -69,9 +70,11 @@ body {
   letter-spacing: -0.03em;
   line-height: 1;
 }
-.stat-label {
+.stat-label,
+.note {
   font-size: 11px;
   color: var(--fg2);
+  line-height: 1.45;
 }
 
 .tier-bar {
@@ -138,7 +141,7 @@ body {
   font-size: 11px;
 }
 .hbar-label {
-  width: 68px;
+  width: 72px;
   flex-shrink: 0;
   color: var(--fg2);
   font-size: 10px;
@@ -156,7 +159,7 @@ body {
   border-radius: 2px;
 }
 .hbar-val {
-  width: 22px;
+  width: 28px;
   flex-shrink: 0;
   font-size: 10px;
   color: var(--fg);
@@ -230,8 +233,17 @@ canvas#canvas {
 
 <div id="sidebar">
   <div>
-    <h1>AI Exposure of the US Job Market</h1>
-    <div class="subtitle">342 occupations &middot; area = employment &middot; color = AI exposure<br>Data from <a href="https://www.bls.gov/ooh/">BLS</a>, scored by Gemini Flash<br><a href="https://github.com/karpathy/jobs">GitHub</a> &middot; <a href="./score-diff.html">score changes</a> &middot; <a href="./non-blue-collar.html">non-blue-collar view</a></div>
+    <h1>AI Exposure of Non-Blue-Collar Jobs</h1>
+    <div class="subtitle">
+      Filtered treemap with manual / blue-collar-heavy categories removed so the color scale is more informative across college- and trade-adjacent knowledge roles.
+      <br><a href="./index.html">Full market view</a> &middot; <a href="./score-diff.html">score changes</a>
+    </div>
+  </div>
+
+  <div class="stat-section">
+    <h3>Included occupations</h3>
+    <div class="stat-big" id="statOccupationCount">—</div>
+    <div class="stat-label" id="statCategoryCount">—</div>
   </div>
 
   <div class="stat-section">
@@ -242,11 +254,17 @@ canvas#canvas {
   <div class="stat-section">
     <h3>Weighted avg. exposure</h3>
     <div class="stat-big" id="statAvgExposure">—</div>
-    <div class="stat-label">job-weighted, 0–10 scale</div>
+    <div class="stat-label">job-weighted, 0-10 scale</div>
   </div>
 
   <div class="stat-section">
-    <h3>Jobs by exposure (weighted by employment)</h3>
+    <h3>Filtered scale</h3>
+    <div class="stat-big" id="statScaleRange">—</div>
+    <div class="stat-label">colors rescaled to this subset's actual range</div>
+  </div>
+
+  <div class="stat-section">
+    <h3>Jobs by exposure</h3>
     <div class="histogram" id="histogram"></div>
     <div class="hist-labels"><span>0</span><span>5</span><span>10</span></div>
   </div>
@@ -266,16 +284,14 @@ canvas#canvas {
     <div class="hbar-chart" id="eduChart"></div>
   </div>
 
-  <div class="stat-section">
-    <h3>Wages exposed</h3>
-    <div class="stat-big" id="statWages">—</div>
-    <div class="stat-label" id="statWagesDesc">annual wages in high-exposure jobs (7+)</div>
+  <div class="gradient-legend">
+    <span id="legendMin">Low</span>
+    <canvas id="gradientLegend" width="80" height="8"></canvas>
+    <span id="legendMax">High</span>
   </div>
 
-  <div class="gradient-legend">
-    <span>Low</span>
-    <canvas id="gradientLegend" width="80" height="8"></canvas>
-    <span>High</span>
+  <div class="note">
+    Excluded categories: construction, production, transportation, installation/repair, farming, food service, and building/grounds cleaning. This is a heuristic view, not a formal labor taxonomy.
   </div>
 </div>
 
@@ -289,12 +305,38 @@ canvas#canvas {
 </div>
 
 <script>
+const EXCLUDED_CATEGORIES = new Set([
+  "building-and-grounds-cleaning",
+  "construction-and-extraction",
+  "farming-fishing-and-forestry",
+  "food-preparation-and-serving",
+  "installation-maintenance-and-repair",
+  "production",
+  "transportation-and-material-moving",
+]);
 
-// ── Exposure color scale ───────────────────────────────────────────────
+let data = [];
+let rects = [];
+let hovered = null;
+let colorScaleMin = 0;
+let colorScaleMax = 10;
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let dpr = window.devicePixelRatio || 1;
+
+const MARGIN = 12;
+const GAP = 1.5;
+
+function normalizeScore(score) {
+  if (score == null) return null;
+  if (colorScaleMax <= colorScaleMin) return 0.5;
+  return Math.max(0, Math.min(1, (score - colorScaleMin) / (colorScaleMax - colorScaleMin)));
+}
 
 function exposureColor(score) {
   if (score == null) return [128, 128, 128];
-  const t = Math.max(0, Math.min(10, score)) / 10;
+  const t = normalizeScore(score);
   let r, g, b;
   if (t < 0.5) {
     const s = t / 0.5;
@@ -315,13 +357,9 @@ function exposureColorCSS(score, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ── Squarified treemap layout ──────────────────────────────────────────
-
 function squarify(items, x, y, w, h) {
   if (items.length === 0) return [];
-  if (items.length === 1) {
-    return [{ ...items[0], rx: x, ry: y, rw: w, rh: h }];
-  }
+  if (items.length === 1) return [{ ...items[0], rx: x, ry: y, rw: w, rh: h }];
 
   const total = items.reduce((s, d) => s + d.value, 0);
   if (total === 0) return [];
@@ -392,22 +430,9 @@ function worstAspect(row, rowSum, side, totalArea, availableExtent) {
   return worst;
 }
 
-// ── Rendering ──────────────────────────────────────────────────────────
-
-let data = [];
-let rects = [];
-let hovered = null;
-
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-let dpr = window.devicePixelRatio || 1;
-
-const MARGIN = 12;
-const GAP = 1.5;
-
 function layout() {
   const sidebarW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w'));
-  const w = (window.innerWidth - sidebarW);
+  const w = window.innerWidth - sidebarW;
   const h = window.innerHeight;
 
   canvas.width = w * dpr;
@@ -422,9 +447,8 @@ function layout() {
 
   const byCategory = {};
   for (const d of data) {
-    const cat = d.category;
-    if (!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(d);
+    if (!byCategory[d.category]) byCategory[d.category] = [];
+    byCategory[d.category].push(d);
   }
 
   const categories = Object.keys(byCategory).map(cat => ({
@@ -434,41 +458,29 @@ function layout() {
   })).sort((a, b) => b.value - a.value);
 
   const catRects = squarify(categories, tx, ty, tw, th);
-
   rects = [];
   for (const cr of catRects) {
-    const innerGap = GAP;
     const items = cr.items.map(d => ({ ...d, value: d.jobs || 1 }));
-    const innerRects = squarify(items,
-      cr.rx + innerGap, cr.ry + innerGap,
-      cr.rw - innerGap * 2, cr.rh - innerGap * 2
-    );
-    for (const ir of innerRects) {
-      rects.push(ir);
-    }
+    const innerRects = squarify(items, cr.rx + GAP, cr.ry + GAP, cr.rw - GAP * 2, cr.rh - GAP * 2);
+    rects.push(...innerRects);
   }
 }
 
 function draw() {
-  const w = canvas.width;
-  const h = canvas.height;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = "#0a0a0f";
-  ctx.fillRect(0, 0, w / dpr, h / dpr);
+  ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
   for (const r of rects) {
     const isHovered = r === hovered;
-
     const g = GAP / 2;
     const rx = r.rx + g;
     const ry = r.ry + g;
     const rw = r.rw - g * 2;
     const rh = r.rh - g * 2;
-
     if (rw <= 0 || rh <= 0) continue;
 
-    const fillAlpha = isHovered ? 0.8 : 0.5;
-    ctx.fillStyle = exposureColorCSS(r.exposure, fillAlpha);
+    ctx.fillStyle = exposureColorCSS(r.exposure, isHovered ? 0.82 : 0.52);
     ctx.fillRect(rx, ry, rw, rh);
 
     if (isHovered) {
@@ -477,9 +489,7 @@ function draw() {
       ctx.strokeRect(rx, ry, rw, rh);
     }
 
-    const minW = 50;
-    const minH = 18;
-    if (rw > minW && rh > minH) {
+    if (rw > 50 && rh > 18) {
       ctx.save();
       ctx.beginPath();
       ctx.rect(rx + 4, ry + 2, rw - 8, rh - 4);
@@ -493,7 +503,7 @@ function draw() {
 
       if (rh > 34 && rw > 60) {
         const info = (r.exposure != null ? r.exposure + "/10" : "") +
-                     (r.jobs ? " \u00b7 " + formatNumber(r.jobs) + " jobs" : "");
+                     (r.jobs ? " · " + formatNumber(r.jobs) + " jobs" : "");
         ctx.font = `400 ${Math.max(8, fontSize - 2)}px -apple-system, system-ui, sans-serif`;
         ctx.fillStyle = "rgba(255,255,255,0.5)";
         ctx.fillText(info, rx + 5, ry + 4 + fontSize + 2);
@@ -507,41 +517,35 @@ function draw() {
 function hitTest(mx, my) {
   const sidebarW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w'));
   const cx = mx - sidebarW;
-  const cy = my;
   for (let i = rects.length - 1; i >= 0; i--) {
     const r = rects[i];
-    if (cx >= r.rx && cx < r.rx + r.rw && cy >= r.ry && cy < r.ry + r.rh) {
-      return r;
-    }
+    if (cx >= r.rx && cx < r.rx + r.rw && my >= r.ry && my < r.ry + r.rh) return r;
   }
   return null;
 }
 
 function formatNumber(n) {
-  if (n == null) return "\u2014";
+  if (n == null) return "—";
   if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
   if (n >= 1000) return Math.round(n / 1000) + "K";
   return n.toLocaleString();
 }
 
 function formatPay(n) {
-  if (n == null) return "\u2014";
+  if (n == null) return "—";
   return "$" + n.toLocaleString();
 }
 
 function showTooltip(d, mx, my) {
   const tt = document.getElementById("tooltip");
-
   tt.querySelector(".tt-title").textContent = d.title;
 
-  const score = d.exposure != null ? d.exposure : null;
-  if (score != null) {
-    const barWidth = score * 10;
-    const color = exposureColorCSS(score, 1);
+  if (d.exposure != null) {
+    const color = exposureColorCSS(d.exposure, 1);
     tt.querySelector(".tt-exposure").innerHTML =
-      `<span style="color:${color};font-weight:600;">AI Exposure: ${score}/10</span>` +
+      `<span style="color:${color};font-weight:600;">AI Exposure: ${d.exposure}/10</span>` +
       `<div style="margin-top:3px;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;">` +
-      `<div style="height:100%;width:${barWidth}%;background:${color};border-radius:2px;"></div></div>`;
+      `<div style="height:100%;width:${d.exposure * 10}%;background:${color};border-radius:2px;"></div></div>`;
   } else {
     tt.querySelector(".tt-exposure").innerHTML = "";
   }
@@ -549,18 +553,15 @@ function showTooltip(d, mx, my) {
   tt.querySelector(".tt-stats").innerHTML = `
     <span class="label">Median pay</span><span class="value">${formatPay(d.pay)}</span>
     <span class="label">Jobs (2024)</span><span class="value">${formatNumber(d.jobs)}</span>
-    <span class="label">Outlook</span><span class="value">${d.outlook != null ? d.outlook + '%' : '\u2014'} ${d.outlook_desc ? '(' + d.outlook_desc + ')' : ''}</span>
-    <span class="label">Education</span><span class="value">${d.education || '\u2014'}</span>
+    <span class="label">Outlook</span><span class="value">${d.outlook != null ? d.outlook + '%' : '—'} ${d.outlook_desc ? '(' + d.outlook_desc + ')' : ''}</span>
+    <span class="label">Education</span><span class="value">${d.education || '—'}</span>
   `;
+  tt.querySelector(".tt-rationale").textContent = d.exposure_rationale || "";
 
-  tt.querySelector(".tt-rationale").textContent =
-    d.exposure_rationale || "";
-
-  const pad = 16;
-  let tx = mx + pad;
-  let ty = my - pad;
-  if (tx + 340 > window.innerWidth) tx = mx - 340 - pad;
-  if (ty < 10) ty = my + pad;
+  let tx = mx + 16;
+  let ty = my - 16;
+  if (tx + 340 > window.innerWidth) tx = mx - 356;
+  if (ty < 10) ty = my + 16;
   if (ty + 200 > window.innerHeight) ty = my - 200;
 
   tt.style.left = tx + "px";
@@ -572,12 +573,13 @@ function hideTooltip() {
   document.getElementById("tooltip").classList.remove("visible");
 }
 
-// ── Sidebar stats ──────────────────────────────────────────────────────
-
 function computeStats() {
   const totalJobs = data.reduce((s, d) => s + (d.jobs || 0), 0);
+  const categories = new Set(data.map(d => d.category));
+  const exposures = data.filter(d => d.exposure != null).map(d => d.exposure);
+  colorScaleMin = exposures.length ? Math.min(...exposures) : 0;
+  colorScaleMax = exposures.length ? Math.max(...exposures) : 10;
 
-  // Job-weighted average exposure
   let weightedSum = 0, weightedCount = 0;
   for (const d of data) {
     if (d.exposure != null && d.jobs) {
@@ -587,15 +589,11 @@ function computeStats() {
   }
   const weightedAvg = weightedCount > 0 ? weightedSum / weightedCount : 0;
 
-  // Histogram: jobs per exposure score 0-10
   const histogram = new Array(11).fill(0);
   for (const d of data) {
-    if (d.exposure != null && d.jobs) {
-      histogram[d.exposure] += d.jobs;
-    }
+    if (d.exposure != null && d.jobs) histogram[d.exposure] += d.jobs;
   }
 
-  // Tiers
   const tiers = [
     { name: "Minimal", range: [0, 1], color: exposureColorCSS(0.5, 1) },
     { name: "Low", range: [2, 3], color: exposureColorCSS(2.5, 1) },
@@ -606,39 +604,29 @@ function computeStats() {
   for (const tier of tiers) {
     tier.jobs = 0;
     for (const d of data) {
-      if (d.exposure != null && d.jobs &&
-          d.exposure >= tier.range[0] && d.exposure <= tier.range[1]) {
+      if (d.exposure != null && d.jobs && d.exposure >= tier.range[0] && d.exposure <= tier.range[1]) {
         tier.jobs += d.jobs;
       }
     }
-    tier.pct = totalJobs > 0 ? (tier.jobs / totalJobs * 100) : 0;
+    tier.pct = totalJobs > 0 ? tier.jobs / totalJobs * 100 : 0;
   }
 
-  // Wages exposed (jobs with exposure >= 7, weighted by pay)
-  let wagesExposed = 0;
-  for (const d of data) {
-    if (d.exposure != null && d.exposure >= 7 && d.jobs && d.pay) {
-      wagesExposed += d.jobs * d.pay;
-    }
-  }
-
-  // Render
-  document.getElementById("statTotalJobs").textContent =
-    (totalJobs / 1e6).toFixed(0) + "M";
+  document.getElementById("statOccupationCount").textContent = data.length;
+  document.getElementById("statCategoryCount").textContent = `${categories.size} categories after filtering`;
+  document.getElementById("statTotalJobs").textContent = (totalJobs / 1e6).toFixed(0) + "M";
   document.getElementById("statAvgExposure").innerHTML =
     `<span style="color:${exposureColorCSS(weightedAvg, 1)}">${weightedAvg.toFixed(1)}</span>`;
+  document.getElementById("statScaleRange").textContent = `${colorScaleMin}–${colorScaleMax}`;
+  document.getElementById("legendMin").textContent = colorScaleMin;
+  document.getElementById("legendMax").textContent = colorScaleMax;
 
-  // Histogram
   const maxHist = Math.max(...histogram);
-  const histEl = document.getElementById("histogram");
-  histEl.innerHTML = histogram.map((count, i) => {
-    const h = maxHist > 0 ? (count / maxHist * 100) : 0;
-    return `<div class="bar" style="height:${Math.max(2, h)}%;background:${exposureColorCSS(i, 0.7)}" title="${i}: ${formatNumber(count)} jobs"></div>`;
+  document.getElementById("histogram").innerHTML = histogram.map((count, i) => {
+    const h = maxHist > 0 ? count / maxHist * 100 : 0;
+    return `<div class="bar" style="height:${Math.max(2, h)}%;background:${exposureColorCSS(i, 0.72)}" title="${i}: ${formatNumber(count)} jobs"></div>`;
   }).join("");
 
-  // Tier breakdown
-  const tierEl = document.getElementById("tierBar");
-  tierEl.innerHTML = tiers.map(t =>
+  document.getElementById("tierBar").innerHTML = tiers.map(t =>
     `<div class="tier-row">
       <div class="tier-color" style="background:${t.color}"></div>
       <span class="tier-name">${t.name} (${t.range[0]}-${t.range[1]})</span>
@@ -647,7 +635,6 @@ function computeStats() {
     </div>`
   ).join("");
 
-  // Exposure by pay band
   const payBands = [
     { label: "<$35K", min: 0, max: 35000 },
     { label: "$35–50K", min: 35000, max: 50000 },
@@ -655,26 +642,22 @@ function computeStats() {
     { label: "$75–100K", min: 75000, max: 100000 },
     { label: "$100K+", min: 100000, max: Infinity },
   ];
-  const payChartEl = document.getElementById("payChart");
-  payChartEl.innerHTML = payBands.map(band => {
+  document.getElementById("payChart").innerHTML = payBands.map(band => {
     let wSum = 0, wCount = 0;
     for (const d of data) {
-      if (d.exposure != null && d.jobs && d.pay != null &&
-          d.pay >= band.min && d.pay < band.max) {
+      if (d.exposure != null && d.jobs && d.pay != null && d.pay >= band.min && d.pay < band.max) {
         wSum += d.exposure * d.jobs;
         wCount += d.jobs;
       }
     }
     const avg = wCount > 0 ? wSum / wCount : 0;
-    const pct = avg / 10 * 100;
     return `<div class="hbar-row">
       <span class="hbar-label">${band.label}</span>
-      <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${exposureColorCSS(avg, 0.8)}"></div></div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${avg / 10 * 100}%;background:${exposureColorCSS(avg, 0.82)}"></div></div>
       <span class="hbar-val">${avg.toFixed(1)}</span>
     </div>`;
   }).join("");
 
-  // Exposure by education
   const eduGroups = [
     { label: "No degree/HS", match: ["No formal educational credential", "High school diploma or equivalent"] },
     { label: "Postsec/Assoc", match: ["Postsecondary nondegree award", "Some college, no degree", "Associate's degree"] },
@@ -682,8 +665,7 @@ function computeStats() {
     { label: "Master's", match: ["Master's degree"] },
     { label: "Doctoral/Prof", match: ["Doctoral or professional degree"] },
   ];
-  const eduChartEl = document.getElementById("eduChart");
-  eduChartEl.innerHTML = eduGroups.map(grp => {
+  document.getElementById("eduChart").innerHTML = eduGroups.map(grp => {
     let wSum = 0, wCount = 0;
     for (const d of data) {
       if (d.exposure != null && d.jobs && grp.match.includes(d.education)) {
@@ -692,21 +674,23 @@ function computeStats() {
       }
     }
     const avg = wCount > 0 ? wSum / wCount : 0;
-    const pct = avg / 10 * 100;
     return `<div class="hbar-row">
       <span class="hbar-label">${grp.label}</span>
-      <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${exposureColorCSS(avg, 0.8)}"></div></div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${avg / 10 * 100}%;background:${exposureColorCSS(avg, 0.82)}"></div></div>
       <span class="hbar-val">${avg.toFixed(1)}</span>
     </div>`;
   }).join("");
-
-  // Wages
-  const trillions = wagesExposed / 1e12;
-  document.getElementById("statWages").textContent =
-    "$" + trillions.toFixed(1) + "T";
 }
 
-// ── Events ─────────────────────────────────────────────────────────────
+function drawGradientLegend() {
+  const c = document.getElementById("gradientLegend");
+  const gctx = c.getContext("2d");
+  for (let x = 0; x < 80; x++) {
+    const score = colorScaleMin + (x / 79) * (colorScaleMax - colorScaleMin);
+    gctx.fillStyle = exposureColorCSS(score, 1);
+    gctx.fillRect(x, 0, 1, 8);
+  }
+}
 
 canvas.addEventListener("mousemove", (e) => {
   const hit = hitTest(e.clientX, e.clientY);
@@ -725,9 +709,7 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("click", (e) => {
   const hit = hitTest(e.clientX, e.clientY);
-  if (hit && hit.url) {
-    window.open(hit.url, "_blank");
-  }
+  if (hit && hit.url) window.open(hit.url, "_blank");
 });
 
 canvas.addEventListener("mouseleave", () => {
@@ -742,24 +724,10 @@ function resize() {
   draw();
 }
 
-// ── Legend gradient ────────────────────────────────────────────────────
-
-function drawGradientLegend() {
-  const c = document.getElementById("gradientLegend");
-  const gctx = c.getContext("2d");
-  for (let x = 0; x < 80; x++) {
-    const score = (x / 79) * 10;
-    gctx.fillStyle = exposureColorCSS(score, 1);
-    gctx.fillRect(x, 0, 1, 8);
-  }
-}
-
-// ── Load ───────────────────────────────────────────────────────────────
-
 fetch("data.json")
   .then(r => r.json())
   .then(d => {
-    data = d;
+    data = d.filter(row => !EXCLUDED_CATEGORIES.has(row.category));
     computeStats();
     drawGradientLegend();
     resize();
