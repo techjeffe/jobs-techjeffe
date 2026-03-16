@@ -81,6 +81,14 @@ There is also an **agentic cap**:
 - **Cognitive synthesis complexity has a modest positive weight** because the scoring assumes advanced AI can increasingly handle non-routine cognitive work, so complexity alone is not treated as a major shield.
 - **The agentic cap exists to keep low-agentic physical jobs in a reasonable range**. A role should not score as highly exposed just because it lacks empathy or formal liability if the final value still depends on embodied, physical execution.
 
+### Why the weights changed over time
+
+Some of the weighting and cap changes were driven by obvious edge cases in the data:
+
+- **Dancers and choreographers** initially scored too high because choreography can be digitized and AI can imitate performance-like output. We pushed more weight toward ontological human necessity because the real product is still embodied human performance, live presence, and audience acceptance of a real performer.
+- **Athletes and sports competitors** are an even clearer version of the same issue. A robot or synthetic simulation might technically reproduce some physical behavior, but the market does not treat that as a substitute for human competition. That is why very low agentic output plus very high human necessity now effectively floors the score.
+- **Drywall installers, ceiling tile installers, and tapers** exposed a different failure mode: low-empathy, low-liability physical work drifting too high just because it is procedural. The current agentic cap is meant to stop that. If the final value is still on-site, embodied physical execution in messy real-world conditions, the occupation should stay in the low-exposure range even if AI can assist planning or measurement.
+
 **What this score is not:**
 - It is not a prediction that a job disappears.
 - It does not capture demand elasticity, regulation, union power, labor shortages, or cultural preferences for human work.
