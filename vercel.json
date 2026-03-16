@@ -1,16 +1,5 @@
 {
-  "rewrites": [
-    {
-      "source": "/",
-      "destination": "/site/index.html"
-    },
-    {
-      "source": "/data.json",
-      "destination": "/site/data.json"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/site/$1"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "outputDirectory": "site"
 }
