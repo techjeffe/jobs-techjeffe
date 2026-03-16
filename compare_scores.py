@@ -325,6 +325,7 @@ td small {
           <input id="search" type="search" placeholder="Filter by occupation or category">
           <select id="sort">
             <option value="abs_delta">Largest absolute change</option>
+            <option value="score_desc">Highest new score</option>
             <option value="delta_desc">Biggest increase</option>
             <option value="delta_asc">Biggest decrease</option>
             <option value="jobs_desc">Most jobs affected</option>
@@ -411,6 +412,7 @@ function renderSummary(summary) {
 function sortRows(rows, mode) {
   const copy = [...rows];
   copy.sort((a, b) => {
+    if (mode === "score_desc") return (b.new_exposure - a.new_exposure) || (Math.abs(b.delta) - Math.abs(a.delta)) || (b.jobs - a.jobs);
     if (mode === "delta_desc") return (b.delta - a.delta) || (b.jobs - a.jobs);
     if (mode === "delta_asc") return (a.delta - b.delta) || (b.jobs - a.jobs);
     if (mode === "jobs_desc") return (b.jobs - a.jobs) || (Math.abs(b.delta) - Math.abs(a.delta));
