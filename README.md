@@ -4,8 +4,6 @@ Analyzing how susceptible every occupation in the US economy is to AI and automa
 
 This fork builds on Josh Kale's restoration of the original project after Andrej Karpathy briefly shared it and took it down. Josh preserved the pipeline, data, and visualization so the work did not disappear.
 
-**Live demo: [jobs-techjeffes-projects.vercel.app](https://jobs-techjeffes-projects.vercel.app/)**
-
 ![AI Exposure Treemap](jobs.png)
 
 ## What's here

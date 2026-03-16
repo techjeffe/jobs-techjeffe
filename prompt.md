@@ -2,7 +2,6 @@
 
 This document packages the dataset in this fork into a single markdown file for LLM analysis. It includes BLS occupation data, the current component-based AI exposure scores, and summary statistics from the site.
 
-Live visualization: https://jobs-techjeffes-projects.vercel.app/
 GitHub fork: https://github.com/techjeffe/jobs
 Upstream inspiration: https://github.com/karpathy/jobs
 

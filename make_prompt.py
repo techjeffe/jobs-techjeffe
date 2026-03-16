@@ -124,7 +124,6 @@ def main():
         "AI exposure scores, and summary statistics from the site."
     )
     lines.append("")
-    lines.append("Live visualization: https://jobs-techjeffes-projects.vercel.app/")
     lines.append("GitHub fork: https://github.com/techjeffe/jobs")
     lines.append("Upstream inspiration: https://github.com/karpathy/jobs")
     lines.append("")
