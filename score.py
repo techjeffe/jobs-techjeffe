@@ -137,7 +137,9 @@ def derive_exposure_score(components):
 
     A second cap applies to authenticity-driven work. When the output is not
     very agentic and the core value is strongly tied to a real human being
-    present as themselves, exposure should stay near the floor.
+    present as themselves, exposure should stay near the floor. A narrow top-
+    end boost also helps separate extremely software-substitutable occupations
+    from the broader cluster of merely high-exposure digital work.
     """
     raw_score = (
         0.38 * components["agentic_output_potential"]
@@ -161,6 +163,13 @@ def derive_exposure_score(components):
         raw_score = min(raw_score, 1.0)
     elif agentic <= 2 and human_necessity >= 8:
         raw_score = min(raw_score, 1.5)
+
+    if (
+        agentic >= 9
+        and components["environmental_unpredictability"] <= 2
+        and human_necessity <= 3
+    ):
+        raw_score = clamp(raw_score + 0.5)
 
     return int(round(raw_score))
 
