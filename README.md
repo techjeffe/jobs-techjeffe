@@ -43,7 +43,7 @@ Instead of asking the model for one final score directly, the pipeline now asks 
 - dependence on human relationships
 - dependence on judgment and accountability
 
-The final exposure score is then derived in code from those components. This reduces how much the final number depends on a single highly prescriptive prompt.
+The final exposure score is then derived in code from those components. This reduces how much the final number depends on a single highly prescriptive prompt and makes the scoring logic easier to inspect and compare across occupations.
 
 **Calibration examples from the dataset:**
 
@@ -56,7 +56,7 @@ The final exposure score is then derived in code from those components. This red
 | 8-9 | Very high | Software developers, paralegals, data analysts, editors |
 | 10 | Maximum | Medical transcriptionists |
 
-Average exposure across all 342 occupations: **5.3/10**.
+Average exposure across all 342 occupations under the current method: **4.5/10**.
 
 ## Visualization
 
