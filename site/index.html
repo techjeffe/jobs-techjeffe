@@ -74,6 +74,28 @@ body {
   color: var(--fg2);
 }
 
+.toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.toggle-btn {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  color: var(--fg2);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.toggle-btn.active {
+  background: rgba(255,255,255,0.12);
+  color: var(--fg);
+  border-color: rgba(255,255,255,0.22);
+}
+
 .tier-bar {
   display: flex;
   flex-direction: column;
@@ -231,7 +253,13 @@ canvas#canvas {
 <div id="sidebar">
   <div>
     <h1>AI Exposure of the US Job Market</h1>
-    <div class="subtitle">342 occupations &middot; area = employment &middot; color = AI exposure<br>Data from <a href="https://www.bls.gov/ooh/">BLS</a>, scored by Gemini Flash<br><a href="https://github.com/karpathy/jobs">GitHub</a> &middot; <a href="./score-diff.html">score changes</a> &middot; <a href="./knowledge-work.html">knowledge-work view</a></div>
+    <div class="subtitle">342 occupations &middot; area = employment &middot; color = AI exposure<br>Data from <a href="https://www.bls.gov/ooh/">BLS</a>, scored by Gemini Flash<br><a href="https://github.com/karpathy/jobs">GitHub</a> &middot; <a href="./score-diff.html">score changes</a></div>
+  </div>
+
+  <div class="stat-section">
+    <h3>View</h3>
+    <div class="toggle-group" id="viewToggle"></div>
+    <div class="stat-label" id="viewDescription">—</div>
   </div>
 
   <div class="stat-section">
@@ -294,7 +322,10 @@ canvas#canvas {
 
 function exposureColor(score) {
   if (score == null) return [128, 128, 128];
-  const t = Math.max(0, Math.min(10, score)) / 10;
+  const range = colorMax - colorMin;
+  const t = range > 0
+    ? Math.max(0, Math.min(1, (score - colorMin) / range))
+    : Math.max(0, Math.min(10, score)) / 10;
   let r, g, b;
   if (t < 0.5) {
     const s = t / 0.5;
@@ -395,8 +426,42 @@ function worstAspect(row, rowSum, side, totalArea, availableExtent) {
 // ── Rendering ──────────────────────────────────────────────────────────
 
 let data = [];
+let allData = [];
 let rects = [];
 let hovered = null;
+let currentView = "full";
+let colorMin = 0;
+let colorMax = 10;
+
+const EXCLUDED_MANUAL_CATEGORIES = new Set([
+  "building-and-grounds-cleaning",
+  "construction-and-extraction",
+  "farming-fishing-and-forestry",
+  "food-preparation-and-serving",
+  "installation-maintenance-and-repair",
+  "production",
+  "transportation-and-material-moving",
+]);
+
+const VIEW_CONFIG = {
+  full: {
+    label: "Full market",
+    description: "All occupations in the dataset.",
+    filter: () => true,
+  },
+  lower_physical: {
+    label: "Lower physical",
+    description: "Occupations with lower physical-world dependency (score 0-6).",
+    filter: d => d.physical_world_dependency == null || d.physical_world_dependency <= 6,
+  },
+  knowledge_mix: {
+    label: "Knowledge-work",
+    description: "Lower-physical roles, excluding the most manual-heavy categories.",
+    filter: d =>
+      (d.physical_world_dependency == null || d.physical_world_dependency <= 6) &&
+      !EXCLUDED_MANUAL_CATEGORIES.has(d.category),
+  },
+};
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -447,6 +512,33 @@ function layout() {
       rects.push(ir);
     }
   }
+}
+
+function setColorScale() {
+  const exposures = data.filter(d => d.exposure != null).map(d => d.exposure);
+  colorMin = exposures.length ? Math.min(...exposures) : 0;
+  colorMax = exposures.length ? Math.max(...exposures) : 10;
+}
+
+function renderViewToggle() {
+  const wrap = document.getElementById("viewToggle");
+  wrap.innerHTML = Object.entries(VIEW_CONFIG).map(([key, cfg]) =>
+    `<button class="toggle-btn ${key === currentView ? 'active' : ''}" data-view="${key}">${cfg.label}</button>`
+  ).join("");
+  wrap.querySelectorAll(".toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => applyView(btn.dataset.view));
+  });
+}
+
+function applyView(viewKey) {
+  currentView = viewKey;
+  const config = VIEW_CONFIG[viewKey] || VIEW_CONFIG.full;
+  data = allData.filter(config.filter);
+  setColorScale();
+  computeStats();
+  drawGradientLegend();
+  resize();
+  renderViewToggle();
 }
 
 function draw() {
@@ -627,6 +719,8 @@ function computeStats() {
     (totalJobs / 1e6).toFixed(0) + "M";
   document.getElementById("statAvgExposure").innerHTML =
     `<span style="color:${exposureColorCSS(weightedAvg, 1)}">${weightedAvg.toFixed(1)}</span>`;
+  document.getElementById("viewDescription").textContent =
+    `${VIEW_CONFIG[currentView].description} Scale: ${colorMin}-${colorMax}.`;
 
   // Histogram
   const maxHist = Math.max(...histogram);
@@ -748,7 +842,7 @@ function drawGradientLegend() {
   const c = document.getElementById("gradientLegend");
   const gctx = c.getContext("2d");
   for (let x = 0; x < 80; x++) {
-    const score = (x / 79) * 10;
+    const score = colorMin + (x / 79) * (colorMax - colorMin);
     gctx.fillStyle = exposureColorCSS(score, 1);
     gctx.fillRect(x, 0, 1, 8);
   }
@@ -759,10 +853,8 @@ function drawGradientLegend() {
 fetch("data.json")
   .then(r => r.json())
   .then(d => {
-    data = d;
-    computeStats();
-    drawGradientLegend();
-    resize();
+    allData = d;
+    applyView("full");
   });
 
 window.addEventListener("resize", resize);

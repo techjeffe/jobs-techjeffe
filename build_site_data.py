@@ -39,6 +39,11 @@ def main():
             "education": row["entry_education"],
             "exposure": score.get("exposure"),
             "exposure_rationale": score.get("rationale"),
+            "digitality": score.get("digitality"),
+            "routine_information_processing": score.get("routine_information_processing"),
+            "physical_world_dependency": score.get("physical_world_dependency"),
+            "human_relationship_dependency": score.get("human_relationship_dependency"),
+            "judgment_accountability_dependency": score.get("judgment_accountability_dependency"),
             "url": row.get("url", ""),
         })
 
