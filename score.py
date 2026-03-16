@@ -24,6 +24,15 @@ DEFAULT_MODEL = "google/gemini-3.1-flash-lite-preview"
 OUTPUT_FILE = "scores.json"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 SCORE_VERSION = 3
+MAX_ATTEMPTS = 3
+REQUIRED_FIELDS = [
+    "agentic_output_potential",
+    "cognitive_synthesis_complexity",
+    "environmental_unpredictability",
+    "ontological_human_necessity",
+    "systemic_accountability",
+    "rationale",
+]
 
 SYSTEM_PROMPT = """\
 You are an expert analyst evaluating how exposed different occupations are to \
@@ -81,6 +90,16 @@ def clamp(value, low=0, high=10):
     return max(low, min(high, value))
 
 
+def strip_code_fences(content):
+    content = content.strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[1]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+    return content
+
+
 def derive_exposure_score(components):
     """
     Convert component dimensions into the final exposure score.
@@ -101,21 +120,20 @@ def derive_exposure_score(components):
 
 
 def normalize_component_scores(result):
-    fields = [
-        "agentic_output_potential",
-        "cognitive_synthesis_complexity",
-        "environmental_unpredictability",
-        "ontological_human_necessity",
-        "systemic_accountability",
-    ]
     components = {}
-    for field in fields:
+    for field in REQUIRED_FIELDS[:-1]:
         components[field] = int(clamp(round(float(result[field]))))
     return components
 
 
-def score_occupation(client, text, model):
-    """Send one occupation to the LLM and return component scores."""
+def validate_result(result):
+    missing = [field for field in REQUIRED_FIELDS if field not in result]
+    if missing:
+        raise ValueError(f"missing required fields: {', '.join(missing)}")
+    return result
+
+
+def request_score(client, messages, model):
     response = client.post(
         API_URL,
         headers={
@@ -123,32 +141,51 @@ def score_occupation(client, text, model):
         },
         json={
             "model": model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text},
-            ],
+            "messages": messages,
             "temperature": 0.2,
         },
         timeout=60,
     )
     response.raise_for_status()
     content = response.json()["choices"][0]["message"]["content"]
+    return strip_code_fences(content)
 
-    # Strip markdown code fences if present
-    content = content.strip()
-    if content.startswith("```"):
-        content = content.split("\n", 1)[1]  # remove first line
-        if content.endswith("```"):
-            content = content[:-3]
-        content = content.strip()
 
-    result = json.loads(content)
-    components = normalize_component_scores(result)
-    return {
-        "components": components,
-        "rationale": result["rationale"],
-        "exposure": derive_exposure_score(components),
-    }
+def score_occupation(client, text, model):
+    """Send one occupation to the LLM and return component scores."""
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": text},
+    ]
+
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            content = request_score(client, messages, model)
+            result = validate_result(json.loads(content))
+            components = normalize_component_scores(result)
+            return {
+                "components": components,
+                "rationale": result["rationale"],
+                "exposure": derive_exposure_score(components),
+            }
+        except Exception as exc:
+            last_error = exc
+            if attempt == MAX_ATTEMPTS:
+                break
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"{text}\n\n"
+                        "Your previous response was invalid. Return ONLY a JSON object with "
+                        f"all required fields: {', '.join(REQUIRED_FIELDS)}."
+                    ),
+                },
+            ]
+
+    raise last_error
 
 
 def main():
