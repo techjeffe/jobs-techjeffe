@@ -456,10 +456,14 @@ const VIEW_CONFIG = {
   },
   knowledge_mix: {
     label: "Knowledge-work",
-    description: "Lower-physical roles, excluding the most manual-heavy categories.",
+    description: "Lower-physical roles with substantial digital or information-processing work.",
     filter: d =>
       (d.physical_world_dependency == null || d.physical_world_dependency <= 6) &&
-      !EXCLUDED_MANUAL_CATEGORIES.has(d.category),
+      (
+        (d.digitality != null && d.digitality >= 6) ||
+        (d.routine_information_processing != null &&
+         d.routine_information_processing >= 6)
+      ),
   },
 };
 
